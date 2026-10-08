@@ -1,0 +1,20 @@
+// # oobiew Render Subsystem Anchor
+//
+// Logline: Consolidates and re-exports presentation formatters for oobiew.
+//
+// Setup: Exports ANSI terminal themes and JSON serializers for binary telemetry.
+//
+// Beats:
+//   1. Re-export binary format terminal visualizer.
+//   2. Re-export ELF header table formatter.
+//   3. Re-export JSON serializers for MCP and CLI envelopes.
+
+import "render/biew_theme.oo";
+
+pub fn render_subsystem_version() -> String {
+    return "0.2.0";
+}
+
+pub fn render_subsystem_description() -> String {
+    return "oobiew pure openOODA render and theme subsystem";
+}

@@ -1,7 +1,7 @@
 # Maintainer: openOODA-tools <ops@openooda.org>
 pkgname=oobiew-bin
 _pkgname=oobiew
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Interactive binary and ELF executable dissector showing headers, symbols, and code."
 arch=('x86_64')

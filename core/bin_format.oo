@@ -1,0 +1,140 @@
+// # oobiew Binary Format Classifier
+//
+// Logline: Classifies raw file streams by identifying executable and container magic signatures.
+//
+// Setup: Inspects leading bytes against standard binary signatures across OS ecosystems.
+//
+// Beats:
+//   1. Check ELF, PE, Mach-O, WASM, and Java bytecode signatures.
+//   2. Identify container and archive headers (Zip, Tar, Gzip, SQLite).
+//   3. Fall back to Shebang text scripts or raw byte data.
+
+pub type FormatInfo = struct {
+    format_name: String,
+    category: String,
+    description: String
+};
+
+pub fn detect_format(content: String) -> FormatInfo {
+    let n: Int = chars_len(content);
+    if n == 0 {
+        return FormatInfo {
+            format_name: "Empty",
+            category: "Empty File",
+            description: "Zero-length file stream"
+        };
+    }
+
+    let b0: Int = byte_at(content, 0);
+
+    if n >= 4 && b0 == 127 {
+        let b1: Int = byte_at(content, 1);
+        let b2: Int = byte_at(content, 2);
+        let b3: Int = byte_at(content, 3);
+        if b1 == 69 && b2 == 76 && b3 == 70 {
+            return FormatInfo {
+                format_name: "ELF",
+                category: "Executable",
+                description: "Executable and Linkable Format binary"
+            };
+        }
+    }
+
+    if n >= 2 && b0 == 77 {
+        let b1: Int = byte_at(content, 1);
+        if b1 == 90 {
+            return FormatInfo {
+                format_name: "PE",
+                category: "Executable",
+                description: "Windows Portable Executable / DOS MZ"
+            };
+        }
+    }
+
+    if n >= 4 && b0 == 0 {
+        let b1: Int = byte_at(content, 1);
+        let b2: Int = byte_at(content, 2);
+        let b3: Int = byte_at(content, 3);
+        if b1 == 97 && b2 == 115 && b3 == 109 {
+            return FormatInfo {
+                format_name: "WASM",
+                category: "Bytecode",
+                description: "WebAssembly binary module"
+            };
+        }
+    }
+
+    if n >= 4 && (b0 == 207 || b0 == 206 || b0 == 254) {
+        let b1: Int = byte_at(content, 1);
+        let b2: Int = byte_at(content, 2);
+        let b3: Int = byte_at(content, 3);
+        if (b0 == 207 && b1 == 250 && b2 == 237 && b3 == 254) || (b0 == 254 && b1 == 237 && b2 == 250 && b3 == 207) {
+            return FormatInfo {
+                format_name: "Mach-O",
+                category: "Executable",
+                description: "Apple Mach-O 64-bit binary"
+            };
+        }
+        if (b0 == 206 && b1 == 250 && b2 == 237 && b3 == 254) || (b0 == 254 && b1 == 237 && b2 == 250 && b3 == 206) {
+            return FormatInfo {
+                format_name: "Mach-O",
+                category: "Executable",
+                description: "Apple Mach-O 32-bit binary"
+            };
+        }
+    }
+
+    if n >= 4 && b0 == 202 {
+        let b1: Int = byte_at(content, 1);
+        let b2: Int = byte_at(content, 2);
+        let b3: Int = byte_at(content, 3);
+        if b1 == 254 && b2 == 186 && b3 == 190 {
+            return FormatInfo {
+                format_name: "Java / Mach-O Fat",
+                category: "Bytecode/Fat",
+                description: "Java Class File or Universal Fat Binary"
+            };
+        }
+    }
+
+    if n >= 4 && b0 == 80 {
+        let b1: Int = byte_at(content, 1);
+        let b2: Int = byte_at(content, 2);
+        let b3: Int = byte_at(content, 3);
+        if b1 == 75 && b2 == 3 && b3 == 4 {
+            return FormatInfo {
+                format_name: "ZIP",
+                category: "Archive",
+                description: "PKZip compressed archive"
+            };
+        }
+    }
+
+    if n >= 2 && b0 == 31 {
+        let b1: Int = byte_at(content, 1);
+        if b1 == 139 {
+            return FormatInfo {
+                format_name: "GZIP",
+                category: "Archive",
+                description: "GNU Gzip compressed stream"
+            };
+        }
+    }
+
+    if n >= 2 && b0 == 35 {
+        let b1: Int = byte_at(content, 1);
+        if b1 == 33 {
+            return FormatInfo {
+                format_name: "Shebang Script",
+                category: "Script",
+                description: "Text executable with interpreter header"
+            };
+        }
+    }
+
+    return FormatInfo {
+        format_name: "Data",
+        category: "Raw Data",
+        description: "Generic unstructured binary or text data"
+    };
+}

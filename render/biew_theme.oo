@@ -1,0 +1,73 @@
+// # oobiew Render Theme & Serializer
+//
+// Logline: Formats binary inspection telemetry into ANSI styled tables and JSON payloads.
+//
+// Setup: Provides visual terminal presentation and machine-readable JSON envelopes.
+//
+// Beats:
+//   1. Define ANSI terminal styling escape codes using native byte sequences.
+//   2. Render formatted human-readable ELF header summaries and format classifications.
+//   3. Serialize binary header data and hexdumps to valid JSON envelopes.
+
+import "core/elf_ident.oo";
+import "core/bin_format.oo";
+
+fn esc() -> String {
+    return bytes_to_str(bytes_push(bytes_new(), 27));
+}
+
+pub fn ansi_reset() -> String { return esc() + "[0m"; }
+pub fn ansi_bold() -> String { return esc() + "[1m"; }
+pub fn ansi_cyan() -> String { return esc() + "[1;36m"; }
+pub fn ansi_green() -> String { return esc() + "[1;32m"; }
+pub fn ansi_yellow() -> String { return esc() + "[33m"; }
+pub fn ansi_blue() -> String { return esc() + "[1;34m"; }
+
+pub fn render_format_summary(fmt: FormatInfo, byte_count: Int) -> String {
+    let mut out: String = ansi_cyan() + "=== Binary Format ===" + ansi_reset() + "\n";
+    out = out + "  " + ansi_bold() + "Format:" + ansi_reset() + "      " + fmt.format_name + "\n";
+    out = out + "  " + ansi_bold() + "Category:" + ansi_reset() + "    " + fmt.category + "\n";
+    out = out + "  " + ansi_bold() + "Description:" + ansi_reset() + " " + fmt.description + "\n";
+    out = out + "  " + ansi_bold() + "Total Size:" + ansi_reset() + "  " + to_string(byte_count) + " bytes\n";
+    return out;
+}
+
+pub fn render_elf_table(elf: ElfHeader) -> String {
+    if !elf.is_elf {
+        return ansi_yellow() + "[!] Not a valid ELF executable" + ansi_reset() + "\n";
+    }
+
+    let mut out: String = ansi_green() + "=== ELF Header Dissection ===" + ansi_reset() + "\n";
+    out = out + "  " + ansi_bold() + "Class:" + ansi_reset() + "       " + to_string(elf.class_bits) + "-bit\n";
+    out = out + "  " + ansi_bold() + "Data:" + ansi_reset() + "        " + elf.endianness + "\n";
+    out = out + "  " + ansi_bold() + "OS / ABI:" + ansi_reset() + "    " + elf.os_abi + "\n";
+    out = out + "  " + ansi_bold() + "Type:" + ansi_reset() + "        " + elf.file_type + "\n";
+    out = out + "  " + ansi_bold() + "Machine:" + ansi_reset() + "     " + elf.machine_arch + "\n";
+    out = out + "  " + ansi_bold() + "Entry Point:" + ansi_reset() + " " + elf.entry_point_hex + "\n";
+    return out;
+}
+
+pub fn render_elf_json(elf: ElfHeader, fmt: FormatInfo, byte_count: Int) -> String {
+    let mut out: String = "{\n";
+    out = out + "  \"format\": \"" + fmt.format_name + "\",\n";
+    out = out + "  \"category\": \"" + fmt.category + "\",\n";
+    out = out + "  \"size\": " + to_string(byte_count) + ",\n";
+    out = out + "  \"is_elf\": " + (if elf.is_elf { "true" } else { "false" }) + ",\n";
+    out = out + "  \"class_bits\": " + to_string(elf.class_bits) + ",\n";
+    out = out + "  \"endianness\": \"" + elf.endianness + "\",\n";
+    out = out + "  \"os_abi\": \"" + elf.os_abi + "\",\n";
+    out = out + "  \"file_type\": \"" + elf.file_type + "\",\n";
+    out = out + "  \"machine_arch\": \"" + elf.machine_arch + "\",\n";
+    out = out + "  \"entry_point\": \"" + elf.entry_point_hex + "\"\n";
+    out = out + "}\n";
+    return out;
+}
+
+pub fn render_hexdump_json(hexdump_raw: String, byte_count: Int, offset: Int) -> String {
+    let mut out: String = "{\n";
+    out = out + "  \"offset\": " + to_string(offset) + ",\n";
+    out = out + "  \"size\": " + to_string(byte_count) + ",\n";
+    out = out + "  \"hexdump\": \"" + hexdump_raw + "\"\n";
+    out = out + "}\n";
+    return out;
+}

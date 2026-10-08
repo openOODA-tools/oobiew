@@ -1,0 +1,105 @@
+// # oobiew CLI Options Parser
+//
+// Logline: Ingests command line arguments into typed binary dissection options.
+//
+// Setup: Pure argument decoding for headers, offsets, lengths, hex modes, and MCP server.
+//
+// Beats:
+//   1. Parse numeric offsets and lengths from string arguments.
+//   2. Define BiewOpts data structure covering all operational modes.
+//   3. Handle flags for headers, hexdump limits, JSON output, and MCP stdio server.
+
+pub type BiewOpts = struct {
+    action: String,
+    show_header: Bool,
+    show_hex: Bool,
+    offset: Int,
+    length: Int,
+    json_mode: Bool,
+    file_path: String
+};
+
+fn digit_val(c: String) -> Int {
+    if c == "0" { return 0; }
+    if c == "1" { return 1; }
+    if c == "2" { return 2; }
+    if c == "3" { return 3; }
+    if c == "4" { return 4; }
+    if c == "5" { return 5; }
+    if c == "6" { return 6; }
+    if c == "7" { return 7; }
+    if c == "8" { return 8; }
+    if c == "9" { return 9; }
+    return -1;
+}
+
+pub fn parse_int_val(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let d: Int = digit_val(char_at(s, i));
+        if d >= 0 {
+            acc = (acc * 10) + d;
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+pub fn default_biew_opts() -> BiewOpts {
+    return BiewOpts {
+        action: "run",
+        show_header: false,
+        show_hex: false,
+        offset: 0,
+        length: 256,
+        json_mode: false,
+        file_path: ""
+    };
+}
+
+pub fn parse_biew_args(args: List[String]) -> BiewOpts {
+    let mut opts: BiewOpts = default_biew_opts();
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+
+    while i < n {
+        let arg: String = list_get(args, i);
+
+        if arg == "-h" || arg == "--help" {
+            opts.action = "help";
+            return opts;
+        } else if arg == "-v" || arg == "--version" {
+            opts.action = "version";
+            return opts;
+        } else if arg == "--mcp" {
+            opts.action = "mcp";
+            return opts;
+        } else if arg == "-H" || arg == "--header" {
+            opts.show_header = true;
+        } else if arg == "-x" || arg == "--hex" {
+            opts.show_hex = true;
+        } else if arg == "--json" {
+            opts.json_mode = true;
+        } else if arg == "-o" || arg == "--offset" {
+            if i + 1 < n {
+                i = i + 1;
+                opts.offset = parse_int_val(list_get(args, i));
+            }
+        } else if arg == "-n" || arg == "--length" {
+            if i + 1 < n {
+                i = i + 1;
+                opts.length = parse_int_val(list_get(args, i));
+            }
+        } else if !str_starts_with(arg, "-") {
+            if chars_len(opts.file_path) == 0 {
+                opts.file_path = arg;
+            }
+        }
+
+        i = i + 1;
+    }
+
+    return opts;
+}

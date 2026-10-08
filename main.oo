@@ -1,52 +1,110 @@
-// # oobiew Main Entry Point
+// # oobiew Main Entry Point - Sovereign Binary Dissector
 //
-// Logline: Interactive binary and ELF executable dissector showing headers, symbols, and code.
+// Logline: Ingests executable and raw files, displaying headers, architecture, and byte windows.
 //
 // Setup: Demands explicit capability tokens and standard argument list.
 //
 // Beats:
 //   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded oobiew operations.
-//   3. Format and output structured results to standard output.
+//   2. Ingest binary stream using capability-bounded file reader.
+//   3. Execute ELF dissection, magic signature classifier, or canonical hexdump window.
+
+import "core/elf_ident.oo";
+import "core/bin_format.oo";
+import "core/hex_dissect.oo";
+import "render/biew_theme.oo";
+import "ipc/biew_opts.oo";
+import "ipc/mcp_serve.oo";
 
 fn render_help() -> String {
-    return "oobiew 0.1.0 (openOODA sovereign search & inspection)\n"
-        + "usage: oobiew [options] [ARGUMENTS]...\n\n"
-        + "Interactive binary and ELF executable dissector showing headers, symbols, and code.\n\n"
+    return "oobiew 0.2.0 (openOODA sovereign binary dissection)\n"
+        + "usage: oobiew [options] <FILE>\n\n"
+        + "Capability-bounded binary file and ELF executable header dissector.\n\n"
         + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
+        + "  -h, --help               display this help and exit\n"
+        + "  -v, --version            output version information and exit\n"
+        + "  -H, --header             display executable headers only\n"
+        + "  -x, --hex                display canonical hexdump view\n"
+        + "  -o, --offset <N>         start offset for hexdump inspection [default: 0]\n"
+        + "  -n, --length <N>         maximum bytes to dissect in hexdump [default: 256]\n"
+        + "      --json               output telemetry as formatted JSON\n"
+        + "      --mcp                run as Model Context Protocol stdio server\n";
 }
 
-fn render_version() -> String {
-    return "oobiew 0.1.0 (openOODA sovereign search & inspection)\n";
-}
+pub fn main(
+    fs: &FsReadCap,
+    proc_cap: &ProcessCap,
+    env: &EnvCap,
+    args: List[String]
+) -> Result[Int, String] {
+    let opts: BiewOpts = parse_biew_args(args);
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
-    let mut i: Int = 0;
-
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
-        }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"oobiew\"}}\n");
-            return 0;
-        }
-        i = i + 1;
+    if opts.action == "help" {
+        print(render_help());
+        return Ok(0);
     }
 
-    print("oobiew: sovereign capability-bounded utility ready\n");
-    return 0;
+    if opts.action == "version" {
+        println("oobiew 0.2.0 (openOODA sovereign binary dissection)");
+        return Ok(0);
+    }
+
+    if opts.action == "mcp" {
+        run_mcp_server(fs);
+        return Ok(0);
+    }
+
+    if chars_len(opts.file_path) == 0 {
+        println("oobiew: missing file operand\nTry 'oobiew --help' for more information.");
+        return Ok(1);
+    }
+
+    let f_res: Result[String, String] = read_file(fs, opts.file_path);
+    if !f_res.is_ok() {
+        println("oobiew: cannot open '" + opts.file_path + "': No such file or read error");
+        return Ok(1);
+    }
+
+    let content: String = match f_res { Ok(s) => s, Err(_) => "" };
+    let size: Int = chars_len(content);
+    let fmt: FormatInfo = detect_format(content);
+    let elf: ElfHeader = parse_elf_header(content);
+
+    if opts.json_mode {
+        if opts.show_hex {
+            let dump: String = dissect_window(content, opts.offset, opts.length);
+            println(render_hexdump_json(dump, size, opts.offset));
+        } else {
+            println(render_elf_json(elf, fmt, size));
+        }
+        return Ok(0);
+    }
+
+    if opts.show_header {
+        print(render_format_summary(fmt, size));
+        if elf.is_elf {
+            print(render_elf_table(elf));
+        }
+        return Ok(0);
+    }
+
+    if opts.show_hex {
+        let dump: String = dissect_window(content, opts.offset, opts.length);
+        if chars_len(dump) > 0 {
+            println(dump);
+        }
+        return Ok(0);
+    }
+
+    print(render_format_summary(fmt, size));
+    if elf.is_elf {
+        print(render_elf_table(elf));
+    }
+    println(ansi_blue() + "=== Hexdump Sample (First 128 Bytes) ===" + ansi_reset());
+    let sample: String = dissect_window(content, 0, 128);
+    if chars_len(sample) > 0 {
+        println(sample);
+    }
+
+    return Ok(0);
 }

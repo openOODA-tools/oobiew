@@ -1,0 +1,98 @@
+// # oobiew Hex Dissector
+//
+// Logline: Formats binary byte streams into formatted canonical hexdump lines with gutters.
+//
+// Setup: Generates offset, 16-byte hex representation with 8-byte spacing, and printable ASCII.
+//
+// Beats:
+//   1. Compute zero-padded hexadecimal offset markers.
+//   2. Render 16 bytes per row in two 8-byte blocks.
+//   3. Render ASCII gutter replacing control characters with dots.
+
+import "core/elf_ident.oo";
+
+fn offset_to_hex8(offset: Int) -> String {
+    let mut s: String = "";
+    let mut i: Int = 7;
+    while i >= 0 {
+        let shift: Int = i * 4;
+        let nibble: Int = (offset >> shift) & 15;
+        if nibble == 0 { s = s + "0"; }
+        else if nibble == 1 { s = s + "1"; }
+        else if nibble == 2 { s = s + "2"; }
+        else if nibble == 3 { s = s + "3"; }
+        else if nibble == 4 { s = s + "4"; }
+        else if nibble == 5 { s = s + "5"; }
+        else if nibble == 6 { s = s + "6"; }
+        else if nibble == 7 { s = s + "7"; }
+        else if nibble == 8 { s = s + "8"; }
+        else if nibble == 9 { s = s + "9"; }
+        else if nibble == 10 { s = s + "a"; }
+        else if nibble == 11 { s = s + "b"; }
+        else if nibble == 12 { s = s + "c"; }
+        else if nibble == 13 { s = s + "d"; }
+        else if nibble == 14 { s = s + "e"; }
+        else { s = s + "f"; }
+        i = i - 1;
+    }
+    return s;
+}
+
+pub fn dissect_row(content: String, row_offset: Int, row_len: Int) -> String {
+    let mut out: String = offset_to_hex8(row_offset) + "  ";
+    let mut ascii_part: String = "|";
+
+    let mut i: Int = 0;
+    while i < 16 {
+        if i < row_len {
+            let b: Int = byte_at(content, row_offset + i);
+            out = out + byte_to_hex_str(b) + " ";
+            if b >= 32 && b <= 126 {
+                ascii_part = ascii_part + bytes_to_str(bytes_push(bytes_new(), b));
+            } else {
+                ascii_part = ascii_part + ".";
+            }
+        } else {
+            out = out + "   ";
+        }
+        if i == 7 {
+            out = out + " ";
+        }
+        i = i + 1;
+    }
+
+    ascii_part = ascii_part + "|";
+    return out + " " + ascii_part;
+}
+
+pub fn dissect_window(content: String, start_offset: Int, max_bytes: Int) -> String {
+    let total: Int = chars_len(content);
+    if start_offset >= total {
+        return "";
+    }
+
+    let mut remaining: Int = total - start_offset;
+    if max_bytes > 0 && remaining > max_bytes {
+        remaining = max_bytes;
+    }
+
+    let mut result: String = "";
+    let mut curr: Int = start_offset;
+    let end_offset: Int = start_offset + remaining;
+
+    while curr < end_offset {
+        let mut rlen: Int = end_offset - curr;
+        if rlen > 16 {
+            rlen = 16;
+        }
+        let line: String = dissect_row(content, curr, rlen);
+        if chars_len(result) == 0 {
+            result = line;
+        } else {
+            result = result + "\n" + line;
+        }
+        curr = curr + 16;
+    }
+
+    return result;
+}

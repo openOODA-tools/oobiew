@@ -54,32 +54,31 @@ oobiew-uninstall
 ## 2. CLI Usage
 
 ```
-usage: oobiew [options] [ARGUMENTS]...
+usage: oobiew [options] <FILE>
 
-Interactive binary and ELF executable dissector showing headers, symbols, and code.
+Capability-bounded binary file and ELF executable header dissector.
 
 Options:
-  -h, --help           display this help and exit
-  -v, --version        output version information and exit
-      --json           output formatted as JSON Lines
-      --color <WHEN>   colorize output: auto, always, never [default: auto]
-      --theme <NAME>   override active oote palette
-      --mcp            run as Model Context Protocol stdio server
+  -h, --help               display this help and exit
+  -v, --version            output version information and exit
+  -H, --header             display executable headers only
+  -x, --hex                display canonical hexdump view
+  -o, --offset <N>         start offset for hexdump inspection [default: 0]
+  -n, --length <N>         maximum bytes to dissect in hexdump [default: 256]
+      --json               output telemetry as formatted JSON
+      --mcp                run as Model Context Protocol stdio server
 ```
 
 ---
 
-## 3. Theming Integration (`oote`)
-
-`oobiew` synchronizes visual styles and status colors with [oote](https://github.com/openOODA-tools/oote):
-* **Configuration:** Reads active palette from `~/.openooda/theme.oot`.
-* **Environment Overrides:** Respects `$OODA_THEME` and `$NO_COLOR`.
-
----
-
-## 4. Model Context Protocol (MCP)
+## 3. Model Context Protocol (MCP)
 
 When invoked with `--mcp`, `oobiew` runs a JSON-RPC 2.0 stdio server providing structured tools for AI coding agents:
+
+* `biew_detect`: Detect file format (ELF, PE, Mach-O, WASM, Shebang, ZIP, etc.) and file size.
+* `biew_elf`: Dissect ELF header parameters (class, endianness, ABI, type, machine architecture, entry point).
+* `biew_hexdump`: Slice canonical hexdump window with offset, hex pairs, and ASCII representation.
+* `biew_stats`: Query oobiew dissector engine metadata and supported formats.
 
 ```bash
 oobiew --mcp
@@ -87,14 +86,14 @@ oobiew --mcp
 
 ---
 
-## 5. Security & Zero Ambient Authority
+## 4. Security & Zero Ambient Authority
 
-* **Pure Capability Bounded:** Operates strictly with explicit tokens (&FsReadCap, &TermCap, &McpCap). Physical absence of ambient disk/net leakage.
-* **Negative-Trust Architecture:** Strict input validation and operational limits.
+* **Pure Capability Bounded:** Operates strictly with explicit tokens (`&FsReadCap`, `&ProcessCap`, `&EnvCap`, `&McpCap`). Physical absence of ambient disk/net leakage.
+* **Negative-Trust Architecture:** Strict input validation and bounded byte slice limits.
 * **Hermetic Binary:** Standalone zero-dependency executable.
 
 ---
 
-## 6. License
+## 5. License
 
 Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

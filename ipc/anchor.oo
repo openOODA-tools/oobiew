@@ -1,0 +1,22 @@
+// # oobiew IPC Subsystem Anchor
+//
+// Logline: Consolidates and re-exports command line parsing and MCP server for oobiew.
+//
+// Setup: Exports option parser, JSON utilities, and JSON-RPC 2.0 streaming loop.
+//
+// Beats:
+//   1. Re-export JSON field extraction and escaping routines.
+//   2. Re-export CLI argument parser and options structure.
+//   3. Re-export Model Context Protocol stdio server handler.
+
+import "ipc/json_field.oo";
+import "ipc/biew_opts.oo";
+import "ipc/mcp_serve.oo";
+
+pub fn ipc_subsystem_version() -> String {
+    return "0.2.0";
+}
+
+pub fn ipc_subsystem_description() -> String {
+    return "oobiew pure openOODA IPC and MCP server subsystem";
+}

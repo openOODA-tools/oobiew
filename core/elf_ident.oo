@@ -1,0 +1,135 @@
+// # oobiew ELF Header Dissector
+//
+// Logline: Ingests and inspects Executable and Linkable Format (ELF) binary headers.
+//
+// Setup: Pure byte inspection decoding architecture, endianness, ABI, and entry point.
+//
+// Beats:
+//   1. Validate ELF identification magic sequence (0x7F 'E' 'L' 'F').
+//   2. Extract architecture bits (32/64), byte order endianness, and target ISA machine.
+//   3. Decode executable type (EXEC, DYN/PIE, REL) and hexadecimal entry point address.
+
+pub type ElfHeader = struct {
+    is_elf: Bool,
+    class_bits: Int,
+    endianness: String,
+    os_abi: String,
+    file_type: String,
+    machine_arch: String,
+    entry_point_hex: String
+};
+
+fn hex_nibble(n: Int) -> String {
+    let clamped: Int = n & 15;
+    if clamped == 0 { return "0"; }
+    if clamped == 1 { return "1"; }
+    if clamped == 2 { return "2"; }
+    if clamped == 3 { return "3"; }
+    if clamped == 4 { return "4"; }
+    if clamped == 5 { return "5"; }
+    if clamped == 6 { return "6"; }
+    if clamped == 7 { return "7"; }
+    if clamped == 8 { return "8"; }
+    if clamped == 9 { return "9"; }
+    if clamped == 10 { return "a"; }
+    if clamped == 11 { return "b"; }
+    if clamped == 12 { return "c"; }
+    if clamped == 13 { return "d"; }
+    if clamped == 14 { return "e"; }
+    return "f";
+}
+
+pub fn byte_to_hex_str(b: Int) -> String {
+    let hi: Int = (b >> 4) & 15;
+    let lo: Int = b & 15;
+    return hex_nibble(hi) + hex_nibble(lo);
+}
+
+pub fn parse_elf_header(content: String) -> ElfHeader {
+    let n: Int = chars_len(content);
+    if n < 16 {
+        return ElfHeader {
+            is_elf: false,
+            class_bits: 0,
+            endianness: "Unknown",
+            os_abi: "Unknown",
+            file_type: "Non-ELF",
+            machine_arch: "Unknown",
+            entry_point_hex: "0x0"
+        };
+    }
+
+    let b0: Int = byte_at(content, 0);
+    let b1: Int = byte_at(content, 1);
+    let b2: Int = byte_at(content, 2);
+    let b3: Int = byte_at(content, 3);
+
+    if b0 != 127 || b1 != 69 || b2 != 76 || b3 != 70 {
+        return ElfHeader {
+            is_elf: false,
+            class_bits: 0,
+            endianness: "Unknown",
+            os_abi: "Unknown",
+            file_type: "Non-ELF",
+            machine_arch: "Unknown",
+            entry_point_hex: "0x0"
+        };
+    }
+
+    let b4: Int = byte_at(content, 4);
+    let bits: Int = if b4 == 1 { 32 } else if b4 == 2 { 64 } else { 0 };
+
+    let b5: Int = byte_at(content, 5);
+    let endian: String = if b5 == 1 { "Little Endian" } else if b5 == 2 { "Big Endian" } else { "Unknown" };
+
+    let b7: Int = byte_at(content, 7);
+    let mut abi: String = "System V";
+    if b7 == 3 { abi = "Linux"; }
+    else if b7 == 9 { abi = "FreeBSD"; }
+
+    let mut ftype: String = "Unknown";
+    let mut march: String = "Unknown";
+    let mut entry_hex: String = "0x0";
+
+    if n >= 20 {
+        let t_lo: Int = byte_at(content, 16);
+        let t_hi: Int = byte_at(content, 17);
+        let etype_val: Int = if b5 == 1 { t_lo + (t_hi << 8) } else { (t_lo << 8) + t_hi };
+
+        if etype_val == 1 { ftype = "Relocatable (.o)"; }
+        else if etype_val == 2 { ftype = "Executable (EXEC)"; }
+        else if etype_val == 3 { ftype = "Shared Object / PIE (.so)"; }
+        else if etype_val == 4 { ftype = "Core Dump (CORE)"; }
+
+        let m_lo: Int = byte_at(content, 18);
+        let m_hi: Int = byte_at(content, 19);
+        let emach_val: Int = if b5 == 1 { m_lo + (m_hi << 8) } else { (m_lo << 8) + m_hi };
+
+        if emach_val == 62 { march = "Advanced Micro Devices X86-64"; }
+        else if emach_val == 3 { march = "Intel 80386"; }
+        else if emach_val == 183 { march = "ARM AArch64"; }
+        else if emach_val == 40 { march = "ARM 32-bit"; }
+        else if emach_val == 243 { march = "RISC-V"; }
+    }
+
+    if bits == 64 && n >= 32 {
+        let mut ep: String = "0x";
+        let mut i: Int = 31;
+        while i >= 24 {
+            let b: Int = byte_at(content, i);
+            ep = ep + byte_to_hex_str(b);
+            i = i - 1;
+        }
+        entry_hex = ep;
+    }
+
+    return ElfHeader {
+        is_elf: true,
+        class_bits: bits,
+        endianness: endian,
+        os_abi: abi,
+        file_type: ftype,
+        machine_arch: march,
+        entry_point_hex: entry_hex
+    };
+}

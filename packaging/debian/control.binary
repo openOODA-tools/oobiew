@@ -1,0 +1,10 @@
+Package: oobiew
+Version: 0.2.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Description: Interactive binary and ELF executable dissector showing headers, symbols, and code.
+ oobiew is a sovereign, capability-bounded BINARY DISSECTOR written in pure
+ openOODA, featuring zero ambient authority, oote color themes, and an
+ MCP stdio server.

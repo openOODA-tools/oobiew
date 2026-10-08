@@ -4,7 +4,7 @@
 # "Removes oobiew binary, package installations, and cache."
 #
 # Usage:
-#   curl -fsSL https://openooda-toobiew.github.io/oobiew/uninstall.sh | bash
+#   curl -fsSL https://openooda-tools.github.io/oobiew/uninstall.sh | bash
 #   or: ./uninstall.sh [options]
 #
 # Options:

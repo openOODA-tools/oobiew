@@ -1,0 +1,22 @@
+// # oobiew Core Anchor
+//
+// Logline: Consolidates and re-exports core binary inspection engines for oobiew.
+//
+// Setup: Exports ELF parsing, magic signature detection, and hexdump dissection.
+//
+// Beats:
+//   1. Re-export ELF header type and parsing routine.
+//   2. Re-export binary format classifier and type.
+//   3. Re-export hexdump window dissection utilities.
+
+import "core/elf_ident.oo";
+import "core/bin_format.oo";
+import "core/hex_dissect.oo";
+
+pub fn core_subsystem_version() -> String {
+    return "0.2.0";
+}
+
+pub fn core_subsystem_description() -> String {
+    return "oobiew pure openOODA core binary dissection subsystem";
+}

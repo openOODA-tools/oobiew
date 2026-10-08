@@ -1,0 +1,128 @@
+// # oobiew Model Context Protocol (MCP) Stdio Server
+//
+// Logline: JSON-RPC 2.0 stdio server providing binary inspection, ELF parsing, and hexdumps.
+//
+// Setup: Demands FsReadCap for binary reading and stdio streaming. Zero ambient authority.
+//
+// Beats:
+//   1. Ingest JSON-RPC 2.0 frames over stdin and dispatch RPC methods.
+//   2. Advertise binary inspection tools: biew_detect, biew_elf, biew_hexdump, biew_stats.
+//   3. Execute capability-bounded binary analysis and stream JSON responses.
+
+import "core/elf_ident.oo";
+import "core/bin_format.oo";
+import "core/hex_dissect.oo";
+import "render/biew_theme.oo";
+import "ipc/json_field.oo";
+import "ipc/biew_opts.oo";
+
+pub fn run_mcp_server(fs: &FsReadCap) {
+    let mut running: Bool = true;
+    while running {
+        let line_res: Result[String, String] = oo_read_stdin_chunk(fs, 8192);
+        if !line_res.is_ok() {
+            running = false;
+        } else {
+            let line: String = match line_res { Ok(s) => s, Err(_) => "" };
+            let trimmed: String = str_trim(line);
+            if chars_len(trimmed) == 0 {
+                running = false;
+            } else {
+                let id: String = json_get_field(trimmed, "id");
+                let method: String = json_get_string(trimmed, "method");
+
+                if method == "initialize" {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"protocolVersion\":\"2024-11-05\"," +
+                        "\"serverInfo\":{\"name\":\"oobiew\",\"version\":\"0.2.0\"}," +
+                        "\"capabilities\":{\"tools\":{}}}}";
+                    println(resp);
+                } else if method == "notifications/initialized" {
+                    // Ack
+                } else if method == "tools/list" {
+                    let t1: String = "{\"name\":\"biew_detect\",\"description\":\"Detect binary format and size\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}";
+                    let t2: String = "{\"name\":\"biew_elf\",\"description\":\"Parse ELF executable header parameters\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}";
+                    let t3: String = "{\"name\":\"biew_hexdump\",\"description\":\"Generate canonical hexdump window\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"offset\":{\"type\":\"integer\"},\"length\":{\"type\":\"integer\"}},\"required\":[\"path\"]}}";
+                    let t4: String = "{\"name\":\"biew_stats\",\"description\":\"Query oobiew dissector engine metadata\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}";
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"tools\":[" + t1 + "," + t2 + "," + t3 + "," + t4 + "]}}";
+                    println(resp);
+                } else if method == "tools/call" {
+                    let params: String = json_get_field(trimmed, "params");
+                    let tool_name: String = json_get_string(params, "name");
+                    let args: String = json_get_field(params, "arguments");
+
+                    if tool_name == "biew_detect" {
+                        let path: String = json_get_string(args, "path");
+                        let f_res: Result[String, String] = read_file(fs, path);
+                        if f_res.is_ok() {
+                            let content: String = match f_res { Ok(s) => s, Err(_) => "" };
+                            let fmt: FormatInfo = detect_format(content);
+                            let j: String = "{\"format\":\"" + fmt.format_name + "\",\"category\":\"" + fmt.category + "\",\"size\":" + to_string(chars_len(content)) + ",\"description\":\"" + fmt.description + "\"}";
+                            let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                                ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(j) + "\"}]}}";
+                            println(resp);
+                        } else {
+                            let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                                ",\"error\":{\"code\":-32000,\"message\":\"Cannot read file\"}}";
+                            println(resp);
+                        }
+                    } else if tool_name == "biew_elf" {
+                        let path: String = json_get_string(args, "path");
+                        let f_res: Result[String, String] = read_file(fs, path);
+                        if f_res.is_ok() {
+                            let content: String = match f_res { Ok(s) => s, Err(_) => "" };
+                            let elf: ElfHeader = parse_elf_header(content);
+                            let fmt: FormatInfo = detect_format(content);
+                            let j: String = render_elf_json(elf, fmt, chars_len(content));
+                            let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                                ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(j) + "\"}]}}";
+                            println(resp);
+                        } else {
+                            let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                                ",\"error\":{\"code\":-32000,\"message\":\"Cannot read file\"}}";
+                            println(resp);
+                        }
+                    } else if tool_name == "biew_hexdump" {
+                        let path: String = json_get_string(args, "path");
+                        let off_str: String = json_get_field(args, "offset");
+                        let len_str: String = json_get_field(args, "length");
+                        let offset: Int = if chars_len(off_str) > 0 { parse_int_val(off_str) } else { 0 };
+                        let length: Int = if chars_len(len_str) > 0 { parse_int_val(len_str) } else { 256 };
+
+                        let f_res: Result[String, String] = read_file(fs, path);
+                        if f_res.is_ok() {
+                            let content: String = match f_res { Ok(s) => s, Err(_) => "" };
+                            let dump: String = dissect_window(content, offset, length);
+                            let j: String = render_hexdump_json(dump, chars_len(content), offset);
+                            let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                                ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(j) + "\"}]}}";
+                            println(resp);
+                        } else {
+                            let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                                ",\"error\":{\"code\":-32000,\"message\":\"Cannot read file\"}}";
+                            println(resp);
+                        }
+                    } else if tool_name == "biew_stats" {
+                        let j: String = "{\"engine\":\"oobiew\",\"version\":\"0.2.0\",\"pure_native\":true,\"formats\":[\"ELF\",\"PE\",\"Mach-O\",\"WASM\",\"Shebang\",\"ZIP\",\"GZIP\",\"Data\"]}";
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(j) + "\"}]}}";
+                        println(resp);
+                    } else {
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                        println(resp);
+                    }
+                } else {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                    println(resp);
+                }
+            }
+        }
+    }
+}
